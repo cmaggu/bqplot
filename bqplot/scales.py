@@ -47,8 +47,8 @@ from ._version import __frontend_version__
 
 
 def register_scale(key=None):
-
-    """Returns a decorator to register a scale type in the scale type registry.
+    """Returns a decorator to register a scale type in the scale type
+    registry.
 
     If no key is provided, the class name is used as a key. A key is
     provided for each core bqplot scale type so that the frontend can use
@@ -121,7 +121,7 @@ class Mercator(GeoScale):
     ----------
     scale_factor: float (default: 190)
         Specifies the scale value for the projection
-    center: list (default: (0, 60))
+    center: tuple (default: (0, 60))
         Specifies the longitude and latitude where the map is centered.
     rotate: tuple (default: (0, 0))
         Degree of rotation in each axis.
@@ -158,7 +158,7 @@ class Albers(GeoScale):
         Degree of rotation in each axis.
     parallels: tuple (default: (29.5, 45.5))
         Sets the two parallels for the conic projection.
-    center: list (default: (0, 60))
+    center: tuple (default: (0, 60))
         Specifies the longitude and latitude where the map is centered.
     precision: float (default: 0.1)
         Specifies the threshold for the projections adaptive resampling to the
@@ -191,6 +191,7 @@ class AlbersUSA(GeoScale):
     ----------
     scale_factor: float (default: 1200)
         Specifies the scale value for the projection
+    translate: tuple (default: (600, 490))
     rtype: (Number, Number) (class-level attribute)
         This attribute should not be modifed. The range type of a geo
         scale is a tuple.
@@ -199,6 +200,7 @@ class AlbersUSA(GeoScale):
     """
 
     scale_factor = Float(1200).tag(sync=True)
+    translate = Tuple((600, 490)).tag(sync=True)
     rtype = '(Number, Number)'
     dtype = np.number
     _view_name = Unicode('AlbersUSA').tag(sync=True)
@@ -216,7 +218,7 @@ class EquiRectangular(GeoScale):
     ----------
     scale_factor: float (default: 145)
        Specifies the scale value for the projection
-    center: list (default: (0, 60))
+    center: tuple (default: (0, 60))
         Specifies the longitude and latitude where the map is centered.
     """
 
@@ -240,7 +242,7 @@ class Orthographic(GeoScale):
     ----------
     scale_factor: float (default: 145)
        Specifies the scale value for the projection
-    center: list (default: (0, 60))
+    center: tuple (default: (0, 60))
         Specifies the longitude and latitude where the map is centered.
     rotate: tuple (default: (96, 0))
         Degree of rotation in each axis.
@@ -273,7 +275,7 @@ class Gnomonic(GeoScale):
     ----------
     scale_factor: float (default: 145)
        Specifies the scale value for the projection
-    center: list (default: (0, 60))
+    center: tuple (default: (0, 60))
         Specifies the longitude and latitude where the map is centered.
     precision: float (default: 0.1)
         Specifies the threshold for the projections adaptive resampling to the
@@ -306,7 +308,7 @@ class Stereographic(GeoScale):
         Specifies the scale value for the projection
     rotate: tuple (default: (96, 0))
         Degree of rotation in each axis.
-    center: list (default: (0, 60))
+    center: tuple (default: (0, 60))
         Specifies the longitude and latitude where the map is centered.
     precision: float (default: 0.1)
         Specifies the threshold for the projections adaptive resampling to the
@@ -351,7 +353,7 @@ class LinearScale(Scale):
         LinearScale should take precedence.
     stabilized: bool (default: False)
         if set to False, the domain of the scale is tied to the data range
-        if set to True, the domain of the scale is udpated only when
+        if set to True, the domain of the scale is updated only when
         the data range is beyond certain thresholds, given by the attributes
         mid_range and min_range.
     mid_range: float (default: 0.8)
@@ -453,7 +455,7 @@ class OrdinalScale(Scale):
         the associated data type / domain type
     """
     rtype = 'Number'
-    dtype = np.str
+    dtype = np.str_
     domain = List().tag(sync=True)
 
     _view_name = Unicode('OrdinalScale').tag(sync=True)
@@ -481,6 +483,8 @@ class ColorScale(Scale):
         if not None, mid is the value corresponding to the mid color.
     scheme: string (default: 'RdYlGn')
         Colorbrewer color scheme of the color scale.
+    extrapolation: {'constant', 'linear'} (default: 'constant')
+        How to extrapolate values outside the [min, max] domain.
     rtype: string (class-level attribute)
         The range type of a color scale is 'Color'. This should not be modifed.
     dtype: type (class-level attribute)
@@ -489,11 +493,13 @@ class ColorScale(Scale):
     rtype = 'Color'
     dtype = np.number
     scale_type = Enum(['linear'], default_value='linear').tag(sync=True)
-    colors = List(trait=Color(default_value=None, allow_none=True)).tag(sync=True)
+    colors = List(trait=Color(default_value=None, allow_none=True))\
+        .tag(sync=True)
     min = Float(None, allow_none=True).tag(sync=True)
     max = Float(None, allow_none=True).tag(sync=True)
     mid = Float(None, allow_none=True).tag(sync=True)
     scheme = Unicode('RdYlGn').tag(sync=True)
+    extrapolation = Enum(['constant', 'linear'], default_value='constant').tag(sync=True)
 
     _view_name = Unicode('ColorScale').tag(sync=True)
     _model_name = Unicode('ColorScaleModel').tag(sync=True)
@@ -520,8 +526,12 @@ class DateColorScale(ColorScale):
     dtype: type (class-level attribute)
         the associated data type / domain type
     """
-    rtype = 'Color'
     dtype = np.datetime64
+    domain_class = Type(Date)
+
+    min = Date(default_value=None, allow_none=True).tag(sync=True)
+    mid = Date(default_value=None, allow_none=True).tag(sync=True)
+    max = Date(default_value=None, allow_none=True).tag(sync=True)
 
     _view_name = Unicode('DateColorScale').tag(sync=True)
     _model_name = Unicode('DateColorScaleModel').tag(sync=True)
@@ -545,8 +555,8 @@ class OrdinalColorScale(ColorScale):
         the associated data type / domain type
     """
     rtype = 'Color'
-    dtype = np.str
+    dtype = np.str_
     domain = List().tag(sync=True)
 
     _view_name = Unicode('OrdinalColorScale').tag(sync=True)
-    _model_name = Unicode('OrdinalScaleModel').tag(sync=True)
+    _model_name = Unicode('OrdinalColorScaleModel').tag(sync=True)

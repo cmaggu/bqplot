@@ -44,8 +44,8 @@ def register_axis(key=None):
     of the kernel language.
     """
     def wrap(axis):
-        l = key if key is not None else axis.__module__ + axis.__name__
-        BaseAxis.axis_types[l] = axis
+        name = key if key is not None else axis.__module__ + axis.__name__
+        BaseAxis.axis_types[name] = axis
         return axis
     return wrap
 
@@ -78,7 +78,7 @@ class Axis(BaseAxis):
     label: string (default: '')
         The axis label
     tick_format: string or None (default: '')
-        The tick format for the axis.
+        The tick format for the axis, for dates use d3 string formatting.
     scale: Scale
         The scale represented by the axis
     num_ticks: int or None (default: None)
@@ -86,7 +86,8 @@ class Axis(BaseAxis):
     tick_values: numpy.ndarray or None (default: None)
         Tick values for the axis
     offset: dict (default: {})
-        Contains a scale and a value {'scale': scale or None, 'value': value of the offset}
+        Contains a scale and a value {'scale': scale or None,
+        'value': value of the offset}
         If offset['scale'] is None, the corresponding figure scale is used
         instead.
     label_location: {'middle', 'start', 'end'}
@@ -103,27 +104,41 @@ class Axis(BaseAxis):
     label_offset: string or None (default: None)
         Label displacement from the axis line. Units allowed are 'em', 'px'
         and 'ex'. Positive values are away from the figure and negative
-        values are towards the figure with resepect to the axis line.
+        values are towards the figure with respect to the axis line.
     visible: bool (default: True)
         A visibility toggle for the axis
+    tick_style: Dict (default: {})
+        Dictionary containing the CSS-style of the text for the ticks.
+        For example: font-size of the text can be changed by passing
+        `{'font-size': 14}`
+    tick_rotate: int (default: 0)
+        Degrees to rotate tick labels by.
     """
     icon = 'fa-arrows'
-    orientation = Enum(['horizontal', 'vertical'], default_value='horizontal').tag(sync=True)
-    side = Enum(['bottom', 'top', 'left', 'right'], allow_none=True, default_value=None).tag(sync=True)
+    orientation = Enum(['horizontal', 'vertical'], default_value='horizontal')\
+        .tag(sync=True)
+    side = Enum(['bottom', 'top', 'left', 'right'],
+                allow_none=True, default_value=None).tag(sync=True)
     label = Unicode().tag(sync=True)
-    grid_lines = Enum(['none', 'solid', 'dashed'], default_value='solid').tag(sync=True)
+    grid_lines = Enum(['none', 'solid', 'dashed'], default_value='solid')\
+        .tag(sync=True)
     tick_format = Unicode(None, allow_none=True).tag(sync=True)
     scale = Instance(Scale).tag(sync=True, **widget_serialization)
     num_ticks = Int(default_value=None, allow_none=True).tag(sync=True)
-    tick_values = Array(None, allow_none=True).tag(sync=True, **array_serialization).valid(array_dimension_bounds(1, 1))
+    tick_values = Array(None, allow_none=True)\
+        .tag(sync=True, **array_serialization)\
+        .valid(array_dimension_bounds(1, 1))
     offset = Dict().tag(sync=True, **widget_serialization)
-    label_location = Enum(['middle', 'start', 'end'], default_value='middle').tag(sync=True)
+    label_location = Enum(['middle', 'start', 'end'],
+                          default_value='middle').tag(sync=True)
     label_color = Color(None, allow_none=True).tag(sync=True)
     grid_color = Color(None, allow_none=True).tag(sync=True)
     color = Color(None, allow_none=True).tag(sync=True)
     label_offset = Unicode(default_value=None, allow_none=True).tag(sync=True)
 
     visible = Bool(True).tag(sync=True)
+    tick_style = Dict().tag(sync=True)
+    tick_rotate = Int(0).tag(sync=True)
 
     _view_name = Unicode('Axis').tag(sync=True)
     _model_name = Unicode('AxisModel').tag(sync=True)
@@ -142,8 +157,10 @@ class ColorAxis(Axis):
     scale: ColorScale
         The scale represented by the axis
     """
-    orientation = Enum(['horizontal', 'vertical'], default_value='horizontal').tag(sync=True)
-    side = Enum(['bottom', 'top', 'left', 'right'], default_value='bottom').tag(sync=True)
+    orientation = Enum(['horizontal', 'vertical'],
+                       default_value='horizontal').tag(sync=True)
+    side = Enum(['bottom', 'top', 'left', 'right'],
+                default_value='bottom').tag(sync=True)
     label = Unicode().tag(sync=True)
     scale = Instance(ColorScale).tag(sync=True, **widget_serialization)
     _view_name = Unicode('ColorAxis').tag(sync=True)

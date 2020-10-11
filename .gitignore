@@ -43,10 +43,11 @@ _templates/
 
 # Jupyter notebook checkpoints
 .ipynb_checkpoints/
+*Untitled*.ipynb
 
 # Compiled javascript
 bqplot/static/
-bqplot/staticlab/
+js/css/bqplot.css
 
 # Node modules
 node_modules
@@ -56,3 +57,8 @@ node_modules
 
 # git
 *.orig
+
+# vim
+*.swp
+
+*.tsbuildinfo

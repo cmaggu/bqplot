@@ -20,7 +20,7 @@ from setuptools.command.egg_info import egg_info
 from subprocess import check_call
 import os
 import sys
-import platform
+from distutils import log
 
 here = os.path.dirname(os.path.abspath(__file__))
 node_root = os.path.join(here, 'js')
@@ -28,13 +28,14 @@ is_repo = os.path.exists(os.path.join(here, '.git'))
 
 npm_path = os.pathsep.join([
     os.path.join(node_root, 'node_modules', '.bin'),
-                os.environ.get('PATH', os.defpath),
+    os.environ.get('PATH', os.defpath),
 ])
 
-from distutils import log
 log.set_verbosity(log.DEBUG)
 log.info('setup.py entered')
 log.info('$PATH=%s' % os.environ['PATH'])
+
+name = 'bqplot'
 
 LONG_DESCRIPTION = """
 BQPlot
@@ -67,8 +68,9 @@ Usage
     plt.show()
 """
 
+
 def js_prerelease(command, strict=False):
-    """decorator for building minified js/css prior to another command"""
+    """Decorator for building minified js/css prior to another command."""
     class DecoratedCommand(command):
         def run(self):
             jsdeps = self.distribution.get_command_obj('jsdeps')
@@ -93,8 +95,9 @@ def js_prerelease(command, strict=False):
             update_package_data(self.distribution)
     return DecoratedCommand
 
+
 def update_package_data(distribution):
-    """update package_data to catch changes during setup"""
+    """Update package_data to catch changes during setup."""
     build_py = distribution.get_command_obj('build_py')
     # distribution.package_data = find_package_data()
     # re-init build_py options which load package_data
@@ -152,7 +155,7 @@ class NPM(Command):
             if not os.path.exists(t):
                 msg = 'Missing file: %s' % t
                 if not has_npm:
-                    msg += '\nnpm is required to build a development version of widgetsnbextension'
+                    msg += '\nnpm is required to build a development version of bqplot'
                 raise ValueError(msg)
 
         # update package data in case this created new files
@@ -162,41 +165,38 @@ version_ns = {}
 with open(os.path.join(here, 'bqplot', '_version.py')) as f:
     exec(f.read(), {}, version_ns)
 
-setup_args = {
-    'name': 'bqplot',
-    'version': version_ns['__version__'],
-    'description': 'Interactive plotting for the Jupyter notebook, using d3.js and ipywidgets.',
-    'long_description': LONG_DESCRIPTION,
-    'License': 'Apache',
-    'include_package_data': True,
-    'data_files': [
+setup_args = dict(
+    name=name,
+    version=version_ns['__version__'],
+    description='Interactive plotting for the Jupyter notebook, using d3.js and ipywidgets.',
+    long_description=LONG_DESCRIPTION,
+    license='Apache',
+    include_package_data=True,
+    data_files=[
         ('share/jupyter/nbextensions/bqplot', [
             'bqplot/static/extension.js',
             'bqplot/static/index.js',
             'bqplot/static/index.js.map',
         ]),
-        ('share/jupyter/labextensions/bqplot', [
-            'bqplot/staticlab/bqplot.bundle.js',
-            'bqplot/staticlab/bqplot.bundle.js.manifest',
-        ]),
+        ('etc/jupyter/nbconfig/notebook.d', ['bqplot.json'])
     ],
-    'install_requires': [
-        'ipywidgets>=6.0.0',
+    install_requires=[
+        'ipywidgets>=7.5.0',
         'traitlets>=4.3.0',
         'traittypes>=0.0.6',
         'numpy>=1.10.4',
         'pandas'],
-    'packages': find_packages(),
-    'zip_safe': False,
-    'cmdclass': {
+    packages=find_packages(exclude=["tests"]),
+    zip_safe=False,
+    cmdclass={
         'build_py': js_prerelease(build_py),
         'egg_info': js_prerelease(egg_info),
         'sdist': js_prerelease(sdist, strict=True),
         'jsdeps': NPM,
     },
-    'author': 'The BQplot Development Team',
-    'url': 'https://github.com/bloomberg/bqplot',
-    'keywords': [
+    author='The BQplot Development Team',
+    url='https://github.com/bloomberg/bqplot',
+    keywords=[
         'ipython',
         'jupyter',
         'widgets',
@@ -204,7 +204,7 @@ setup_args = {
         'plotting',
         'd3',
     ],
-    'classifiers': [
+    classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'Intended Audience :: Science/Research',
@@ -217,6 +217,6 @@ setup_args = {
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
     ],
-}
+)
 
 setup(**setup_args)

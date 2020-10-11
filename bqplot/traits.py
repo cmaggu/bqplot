@@ -26,13 +26,13 @@ Traits Types
    Date
 """
 
-from traitlets import Instance, TraitError, TraitType, Undefined
+from traitlets import TraitError, TraitType
 
-import traittypes as tt
 import numpy as np
 import pandas as pd
 import warnings
 import datetime as dt
+import six
 
 # Date
 
@@ -40,11 +40,14 @@ def date_to_json(value, obj):
     if value is None:
         return value
     else:
-        return value.strftime('%Y-%m-%dT%H:%M:%S.%f')
+        # Droping microseconds and only keeping milliseconds to conform
+        # with JavaScript's Data.toJSON's behavior - and prevent bouncing
+        # back updates from the front-end.
+        return value.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
 
 def date_from_json(value, obj):
     if value:
-        return dt.datetime.strptime(value, '%Y-%m-%dT%H:%M:%S.%f')
+        return dt.datetime.strptime(value.rstrip('Z'), '%Y-%m-%dT%H:%M:%S.%f')
     else:
         return value
 
@@ -96,23 +99,23 @@ def convert_to_date(array, fmt='%m-%d-%Y'):
         # data could be any of the combinations of
         #            [list, nparray] X [python_datetime, np.datetime]
         # Because of the coerce=True flag, any non-compatible datetime type
-        # will be converted to pd.NaT. By this comparision, we can figure
+        # will be converted to pd.NaT. By this comparison, we can figure
         # out if it is date castable or not.
         if(len(np.shape(array)) == 2):
             for elem in array:
                 temp_val = pd.to_datetime(
-                    elem, errors='coerce', box=False, infer_datetime_format=True)
+                    elem, errors='coerce', infer_datetime_format=True)
                 temp_val = elem if (
                     temp_val[0] == np.datetime64('NaT')) else temp_val
                 return_value.append(temp_val)
         elif(isinstance(array, list)):
             temp_val = pd.to_datetime(
-                array, errors='coerce', box=False, infer_datetime_format=True)
+                array, errors='coerce', infer_datetime_format=True)
             return_value = array if (
                 temp_val[0] == np.datetime64('NaT')) else temp_val
         else:
             temp_val = pd.to_datetime(
-                array, errors='coerce', box=False, infer_datetime_format=True)
+                array, errors='coerce', infer_datetime_format=True)
             temp_val = array if (
                 temp_val[0] == np.datetime64('NaT')) else temp_val
             return_value = temp_val
@@ -121,47 +124,77 @@ def convert_to_date(array, fmt='%m-%d-%Y'):
         warnings.warn("Array could not be converted into a date")
         return array
 
-# Array
 
 def array_from_json(value, obj=None):
     if value is not None:
-        if value.get('values') is not None:
-            dtype = {
-                'date': np.datetime64,
-                'float': np.float64
-            }.get(value.get('type'), object)
-            return np.asarray(value['values'], dtype=dtype)
+        # this will accept regular json data, like an array of values, which can be useful it you want
+        # to link bqplot to other libraries that use that
+        if isinstance(value, list):
+            if len(value) > 0 and isinstance(value[0], dict) and 'value' in value[0]:
+                return np.array([array_from_json(k) for k in value])
+            else:
+                return np.array(value)
+        elif 'value' in value:
+            try:
+                ar = np.frombuffer(value['value'], dtype=value['dtype']).reshape(value['shape'])
+            except AttributeError:
+                # in some python27/numpy versions it does not like the memoryview
+                # we go the .tobytes() route, but since i'm not 100% sure memory copying
+                # is happening or not, we one take this path if the above fails.
+                ar = np.frombuffer(value['value'].tobytes(), dtype=value['dtype']).reshape(value['shape'])
+            if value.get('type') == 'date':
+                assert value['dtype'] == 'float64'
+                ar = ar.astype('datetime64[ms]')
+            return ar
 
-def array_to_json(a, obj=None):
-    if a is not None:
-        if np.issubdtype(a.dtype, np.float):
-            # replace nan with None
-            dtype = 'float'
-            a = np.where(np.isnan(a), None, a)
-        elif a.dtype in (int, np.int64):
-            dtype = 'float'
-            a = a.astype(np.float64)
-        elif np.issubdtype(a.dtype, np.datetime64):
-            dtype = 'date'
-            a = a.astype(np.str).astype('object')
-            for x in np.nditer(a, flags=['refs_ok'], op_flags=['readwrite']):
-                # for every element in the nd array, forcing the conversion into
-                # the format specified here.
-                temp_x = pd.to_datetime(x.flatten()[0])
-                if pd.isnull(temp_x):
-                    x[...] = None
-                else:
-                    x[...] = temp_x.to_pydatetime().strftime(
-                        '%Y-%m-%dT%H:%M:%S.%f')
+def array_to_json(ar, obj=None, force_contiguous=True):
+    if ar is None:
+        return None
+
+    array_type = None
+
+    if ar.dtype.kind == 'O':
+        # Try to serialize the array of objects
+        is_string = np.vectorize(lambda x: isinstance(x, six.string_types))
+        is_timestamp = np.vectorize(lambda x: isinstance(x, pd.Timestamp))
+        is_array_like = np.vectorize(lambda x: isinstance(x, (list, np.ndarray)))
+
+        if np.all(is_timestamp(ar)):
+            ar = ar.astype('datetime64[ms]').astype(np.float64)
+            array_type = 'date'
+        elif np.all(is_string(ar)):
+            ar = ar.astype('U')
+        elif np.all(is_array_like(ar)):
+            return [array_to_json(np.array(row), obj, force_contiguous) for row in ar]
         else:
-            dtype = a.dtype
-        return dict(values=a.tolist(), type=str(dtype))
-    else:
-        return dict(values=a, type=None)
+            raise ValueError("Unsupported dtype object")
+
+    if ar.dtype.kind in ['S', 'U']:  # strings to as plain json
+        return ar.tolist()
+
+    if ar.dtype.kind == 'M':
+        # since there is no support for int64, we'll use float64 but as ms
+        # resolution, since that is the resolution the js Date object understands
+        ar = ar.astype('datetime64[ms]').astype(np.float64)
+        array_type = 'date'
+
+    if ar.dtype.kind not in ['u', 'i', 'f']:  # ints and floats, and datetime
+        raise ValueError("Unsupported dtype: %s" % (ar.dtype))
+
+    if ar.dtype == np.int64:  # JS does not support int64
+        ar = ar.astype(np.int32)
+
+    if force_contiguous and not ar.flags["C_CONTIGUOUS"]:  # make sure it's contiguous
+        ar = np.ascontiguousarray(ar)
+
+    if not ar.dtype.isnative:
+        dtype = ar.dtype.newbyteorder()
+        ar = ar.astype(dtype)
+
+    return {'value': memoryview(ar), 'dtype': str(ar.dtype), 'shape': ar.shape, 'type': array_type}
+
 
 array_serialization = dict(to_json=array_to_json, from_json=array_from_json)
-
-# array validators
 
 def array_squeeze(trait, value):
     if len(value.shape) > 1:
@@ -178,6 +211,16 @@ def array_dimension_bounds(mindim=0, maxdim=np.inf):
             % (trait.name, trait.this_class, mindim, maxdim, value.shape))
         return value
     return validator
+
+def array_supported_kinds(kinds='biufMSUO'):
+    def validator(trait, value):
+        if value.dtype.kind not in kinds:
+            raise TraitError('Array type not supported for trait %s of class %s: expected a \
+            array of kind in list %r and got an array of type %s (kind %s)'\
+            % (trait.name, trait.this_class, list(kinds), value.dtype, value.dtype.kind))
+        return value
+    return validator
+
 
 # DataFrame
 
@@ -212,3 +255,10 @@ def series_to_json(value, obj):
     return value.to_dict()
 
 series_serialization = dict(to_json=series_to_json, from_json=series_from_json)
+
+def _array_equal(a, b):
+    """Really tests if arrays are equal, where nan == nan == True"""
+    try:
+        return np.allclose(a, b, 0, 0, equal_nan=True)
+    except (TypeError, ValueError):
+        return False

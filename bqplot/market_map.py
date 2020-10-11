@@ -24,16 +24,16 @@ Market Map
    :toctree: _generate/
 
    MarketMap
-   SquareMarketMap
 """
 
-from traitlets import Int, Unicode, List, Dict, Enum, Bool, Instance, Float
+from traitlets import Int, Unicode, List, Dict, Bool, Instance, Float
 from traittypes import Array, DataFrame
-from ipywidgets import (
-        DOMWidget, CallbackDispatcher, Color, widget_serialization, Layout
-    )
+from ipywidgets import (DOMWidget, CallbackDispatcher, Color,
+                        widget_serialization)
+from ipywidgets.widgets.widget_layout import LayoutTraitType
 
-from .traits import array_serialization, dataframe_serialization, dataframe_warn_indexname
+from .traits import (array_serialization, dataframe_serialization,
+                     dataframe_warn_indexname)
 from .marks import CATEGORY10
 from ._version import __frontend_version__
 
@@ -80,6 +80,9 @@ class MarketMap(DOMWidget):
     tooltip_formats: list
         formats for each of the fields for the tooltip data. Order should match
         the order of the tooltip_fields
+    freeze_tooltip_location: bool (default: False)
+        if True, freezes the location of the tooltip. If False, tootip will
+        follow the mouse
     show_groups: bool
         attribute to determine if the groups should be displayed. If set to
         True, the finer elements are blurred
@@ -160,8 +163,11 @@ class MarketMap(DOMWidget):
     """
     names = Array([]).tag(sync=True, **array_serialization)
     groups = Array([]).tag(sync=True, **array_serialization)
-    display_text = Array(None, allow_none=True).tag(sync=True, **array_serialization)
-    ref_data = DataFrame(None, allow_none=True).tag(sync=True, **dataframe_serialization).valid(dataframe_warn_indexname)
+    display_text = Array(None, allow_none=True)\
+        .tag(sync=True, **array_serialization)
+    ref_data = DataFrame(None, allow_none=True)\
+        .tag(sync=True, **dataframe_serialization)\
+        .valid(dataframe_warn_indexname)
     title = Unicode().tag(sync=True)
 
     tooltip_fields = List().tag(sync=True)
@@ -176,11 +182,11 @@ class MarketMap(DOMWidget):
     scales = Dict().tag(sync=True, **widget_serialization)
     axes = List().tag(sync=True, **widget_serialization)
     color = Array([]).tag(sync=True, **array_serialization)
-    map_margin = Dict(dict(top=50, right=50, left=50, bottom=50)).tag(sync=True)
+    map_margin = Dict(dict(top=50, right=50, left=50, bottom=50))\
+        .tag(sync=True)
 
-    layout = Instance(Layout, kw={
-            'min_width': '125px'
-        }, allow_none=True).tag(sync=True, **widget_serialization)
+    layout = LayoutTraitType(kw=dict(min_width='125px'))\
+        .tag(sync=True, **widget_serialization)
     min_aspect_ratio = Float(1.0).tag(sync=True)
     # Max aspect ratio is such that we can have 3 charts stacked vertically
     # on a 16:9 monitor: 16/9*3 ~ 5.333
@@ -188,7 +194,7 @@ class MarketMap(DOMWidget):
 
     stroke = Color('white').tag(sync=True)
     group_stroke = Color('black').tag(sync=True)
-    selected_stroke = Color('dodgerblue', allow_none=True).tag(sync=True)
+    selected_stroke = Color('orangered', allow_none=True).tag(sync=True)
     hovered_stroke = Color('orangered', allow_none=True).tag(sync=True)
     font_style = Dict().tag(sync=True)
     title_style = Dict().tag(sync=True)
@@ -196,7 +202,9 @@ class MarketMap(DOMWidget):
     selected = List().tag(sync=True)
     enable_hover = Bool(True).tag(sync=True)
     enable_select = Bool(True).tag(sync=True)
-    tooltip_widget = Instance(DOMWidget, allow_none=True, default_value=None).tag(sync=True, **widget_serialization)
+    tooltip_widget = Instance(DOMWidget, allow_none=True, default_value=None)\
+        .tag(sync=True, **widget_serialization)
+    freeze_tooltip_location = Bool(False).tag(sync=True)
 
     def __init__(self, **kwargs):
         super(MarketMap, self).__init__(**kwargs)
@@ -210,17 +218,17 @@ class MarketMap(DOMWidget):
         if content.get('event', '') == 'hover':
             self._hover_handlers(self, content)
 
+    def _compare(self, a, b):
+        # Compare dataframes properly
+        import pandas as pd
+        if isinstance(a, pd.DataFrame) or isinstance(b, pd.DataFrame):
+            return pd.DataFrame.equals(a, b)
+
+        return super(MarketMap, self)._compare(a, b)
+
     _view_name = Unicode('MarketMap').tag(sync=True)
     _model_name = Unicode('MarketMapModel').tag(sync=True)
     _view_module = Unicode('bqplot').tag(sync=True)
     _model_module = Unicode('bqplot').tag(sync=True)
     _view_module_version = Unicode(__frontend_version__).tag(sync=True)
     _model_module_version = Unicode(__frontend_version__).tag(sync=True)
-
-
-class SquareMarketMap(MarketMap):
-    margin = Dict(dict(top=50, right=50, left=50, bottom=50)).tag(sync=True)
-    data = Dict().tag(sync=True)
-    mode = Enum(['squarify', 'slice', 'dice', 'slice-dice'], default_value='squarify').tag(sync=True)
-
-    _view_name = Unicode('SquareMarketMap').tag(sync=True)

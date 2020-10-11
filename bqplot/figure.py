@@ -18,10 +18,10 @@ r"""
 Figure
 ======
 
-.. currentmodule:: bqplot.figure::
+.. currentmodule:: bqplot.figure
 
-
-.. autosummary   :toctree: _generate/
+.. autosummary::
+   :toctree: _generate/
 
    Figure
 """
@@ -31,7 +31,6 @@ from traitlets import (
     validate
 )
 from ipywidgets import DOMWidget, register, widget_serialization
-from ipywidgets.widgets.widget_layout import LayoutTraitType
 
 from .scales import Scale, LinearScale
 from .interacts import Interaction
@@ -40,7 +39,7 @@ from .axes import Axis
 from ._version import __frontend_version__
 
 
-@register('bqplot.Figure')
+@register
 class Figure(DOMWidget):
 
     """Main canvas for drawing a chart.
@@ -72,14 +71,22 @@ class Figure(DOMWidget):
     padding_y: Float (default: 0.025)
         Padding to be applied in the vertical direction of the figure
         around the data points, proportion of the vertical length
-    legend_location: {'top-right', 'top', 'top-left', 'left', 'bottom-left', 'bottom', 'bottom-right', 'right'}
+    legend_location: {'top-right', 'top', 'top-left', 'left',
+        'bottom-left', 'bottom', 'bottom-right', 'right'}
         location of the legend relative to the center of the figure
     background_style: Dict (default: {})
         CSS style to be applied to the background of the figure
+    legend_style: Dict (default: {})
+        CSS style to be applied to the SVG legend e.g, {'fill': 'white'}
+    legend_text: Dict (default: {})
+        CSS style to be applied to the legend text e.g., {'font-size': 20}
     title_style: Dict (default: {})
         CSS style to be applied to the title of the figure
     animation_duration: nonnegative int (default: 0)
         Duration of transition on change of data attributes, in milliseconds.
+    pixel_ratio:
+        Pixel ratio of the WebGL canvas (2 on retina screens). Set to 1 for better performance,
+        but less crisp edges. If set to None it will use the browser's window.devicePixelRatio.
 
     Layout Attributes
 
@@ -96,7 +103,9 @@ class Figure(DOMWidget):
     -------
 
     save_png:
-       Saves the figure as a png file
+       Saves the figure as a PNG file
+    save_svg:
+       Saves the figure as an SVG file
 
     Note
     ----
@@ -118,27 +127,31 @@ class Figure(DOMWidget):
     title = Unicode().tag(sync=True, display_name='Title')
     axes = List(Instance(Axis)).tag(sync=True, **widget_serialization)
     marks = List(Instance(Mark)).tag(sync=True, **widget_serialization)
-    interaction = Instance(Interaction, default_value=None, allow_none=True).tag(sync=True,
-                           **widget_serialization)
+    interaction = Instance(Interaction, default_value=None,
+                           allow_none=True).tag(sync=True,
+                                                **widget_serialization)
     scale_x = Instance(Scale).tag(sync=True, **widget_serialization)
     scale_y = Instance(Scale).tag(sync=True, **widget_serialization)
     title_style = Dict(trait=Unicode()).tag(sync=True)
     background_style = Dict().tag(sync=True)
+    legend_style = Dict().tag(sync=True)
+    legend_text = Dict().tag(sync=True)
+    theme = Enum(['classic', 'gg'], default_value='classic').tag(sync=True)
 
-    # min width is based on hardcoded padding values
-    layout = LayoutTraitType(kw=dict(min_width='125px')).tag(sync=True, **widget_serialization)
-    min_aspect_ratio = Float(1.0).tag(sync=True)
-    # Max aspect ratio is such that we can have 3 charts stacked vertically
-    # on a 16:9 monitor: 16/9*3 ~ 5.333
-    max_aspect_ratio = Float(6.0).tag(sync=True)
+    min_aspect_ratio = Float(0.01).tag(sync=True)
+    max_aspect_ratio = Float(100).tag(sync=True)
+    pixel_ratio = Float(None, allow_none=True).tag(sync=True)
 
-    fig_margin = Dict(dict(top=60, bottom=60, left=60, right=60)).tag(sync=True)
+    fig_margin = Dict(dict(top=60, bottom=60, left=60, right=60))\
+        .tag(sync=True)
     padding_x = Float(0.0, min=0.0, max=1.0).tag(sync=True)
     padding_y = Float(0.025, min=0.0, max=1.0).tag(sync=True)
     legend_location = Enum(['top-right', 'top', 'top-left', 'left',
                             'bottom-left', 'bottom', 'bottom-right', 'right'],
-                           default_value='top-right').tag(sync=True, display_name='Legend position')
-    animation_duration = Int().tag(sync=True, display_name='Animation duration')
+                           default_value='top-right')\
+        .tag(sync=True, display_name='Legend position')
+    animation_duration = Int().tag(sync=True,
+                                   display_name='Animation duration')
 
     @default('scale_x')
     def _default_scale_x(self):
@@ -148,15 +161,38 @@ class Figure(DOMWidget):
     def _default_scale_y(self):
         return LinearScale(min=0, max=1, allow_padding=False)
 
-    def save_png(self):
-        self.send({"type": "save_png"})
+    def save_png(self, filename='bqplot.png', scale=None):
+        '''
+        Saves the Figure as a PNG file
+
+        Parameters
+        ----------
+        filename: str (default: 'bqplot.png')
+            name of the saved file
+        scale: float (default: None)
+            Scale up the png resolution when scale > 1, when not given base this on the screen pixel ratio.
+        '''
+        self.send({'type': 'save_png', 'filename': filename, 'scale': scale})
+
+    def save_svg(self, filename='bqplot.svg'):
+        '''
+        Saves the Figure as an SVG file
+
+        Parameters
+        ----------
+        filename: str (default: 'bqplot.svg')
+            name of the saved file
+        '''
+        self.send({"type": "save_svg", "filename": filename})
 
     @validate('min_aspect_ratio', 'max_aspect_ratio')
     def _validate_aspect_ratio(self, proposal):
         value = proposal['value']
-        if proposal['trait'].name == 'min_aspect_ratio' and value > self.max_aspect_ratio:
+        if proposal['trait'].name == 'min_aspect_ratio' and \
+           value > self.max_aspect_ratio:
             raise TraitError('setting min_aspect_ratio > max_aspect_ratio')
-        if proposal['trait'].name == 'max_aspect_ratio' and value < self.min_aspect_ratio:
+        if proposal['trait'].name == 'max_aspect_ratio' and \
+           value < self.min_aspect_ratio:
             raise TraitError('setting max_aspect_ratio < min_aspect_ratio')
         return value
 

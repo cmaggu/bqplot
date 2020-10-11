@@ -36,18 +36,19 @@ Interacts
    TwoDSelector
 """
 
-from traitlets import Bool, Int, Float, Unicode, Dict, Instance, List, TraitError
+from traitlets import (Bool, Int, Float, Unicode, Dict,
+                       Instance, List, Enum, observe)
 from traittypes import Array
-from ipywidgets import Widget, Color, widget_serialization
+from ipywidgets import Widget, Color, widget_serialization, register
 
-from .scales import Scale, DateScale
-from .traits import Date, array_serialization
-from .marks import Lines, Scatter
+from .scales import Scale
+from .traits import Date, array_serialization, _array_equal
+from .marks import Lines
 from ._version import __frontend_version__
+import numpy as np
 
 
 def register_interaction(key=None):
-
     """Decorator registering an interaction class in the registry.
 
     If no key is provided, the class name is used as a key. A key is provided
@@ -55,8 +56,9 @@ def register_interaction(key=None):
     key regardless of the kernal language.
     """
     def wrap(interaction):
-        l = key if key is not None else interaction.__module__ + interaction.__name__
-        interaction.types[l] = interaction
+        name = key if key is not None else interaction.__module__ + \
+            interaction.__name__
+        interaction.types[name] = interaction
         return interaction
     return wrap
 
@@ -88,8 +90,8 @@ class Interaction(Widget):
     _model_module = Unicode('bqplot').tag(sync=True)
     _view_module_version = Unicode(__frontend_version__).tag(sync=True)
     _model_module_version = Unicode(__frontend_version__).tag(sync=True)
-    _ipython_display_ = None  # We cannot display an interaction outside of a
-                              # figure
+    # We cannot display an interaction outside of a figure
+    _ipython_display_ = None
 
 
 @register_interaction('bqplot.HandDraw')
@@ -120,17 +122,21 @@ class HandDraw(Interaction):
     max_x: float or Date or None (default: None)
         The maximum value of 'x' which should be edited via the handdraw.
     """
-    lines = Instance(Lines, allow_none=True, default_value=None).tag(sync=True, **widget_serialization)
+    lines = Instance(Lines, allow_none=True, default_value=None)\
+        .tag(sync=True, **widget_serialization)
     line_index = Int().tag(sync=True)
     # TODO: Handle infinity in a meaningful way (json does not)
-    min_x = (Float(None, allow_none=True) | Date(None, allow_none=True)).tag(sync=True)
-    max_x = (Float(None, allow_none=True) | Date(None, allow_none=True)).tag(sync=True)
+    min_x = (Float(None, allow_none=True) | Date(None, allow_none=True))\
+        .tag(sync=True)
+    max_x = (Float(None, allow_none=True) | Date(None, allow_none=True))\
+        .tag(sync=True)
 
     _view_name = Unicode('HandDraw').tag(sync=True)
     _model_name = Unicode('HandDrawModel').tag(sync=True)
 
 
 @register_interaction('bqplot.PanZoom')
+@register
 class PanZoom(Interaction):
 
     """An interaction to pan and zoom wrt scales.
@@ -148,8 +154,8 @@ class PanZoom(Interaction):
     """
     allow_pan = Bool(True).tag(sync=True)
     allow_zoom = Bool(True).tag(sync=True)
-    scales = Dict(trait=List(trait=Instance(Scale))).tag(sync=True,
-                  **widget_serialization)
+    scales = Dict(trait=List(trait=Instance(Scale)))\
+        .tag(sync=True, **widget_serialization)
 
     _view_name = Unicode('PanZoom').tag(sync=True)
     _model_name = Unicode('PanZoomModel').tag(sync=True)
@@ -162,9 +168,9 @@ def panzoom(marks):
     scales of the specified marks.
     """
     return PanZoom(scales={
-            'x': sum([mark._get_dimension_scales('x', preserve_domain=True) for mark in marks], []),
-            'y': sum([mark._get_dimension_scales('y', preserve_domain=True) for mark in marks], [])
-        })
+        'x': sum([mark._get_dimension_scales('x', preserve_domain=True) for mark in marks], []),
+        'y': sum([mark._get_dimension_scales('y', preserve_domain=True) for mark in marks], [])
+    })
 
 
 class Selector(Interaction):
@@ -181,8 +187,6 @@ class Selector(Interaction):
     """
     marks = List().tag(sync=True, **widget_serialization)
 
-    _view_name = Unicode('Selector').tag(sync=True)
-
     def reset(self):
         self.send({"type": "reset"})
 
@@ -192,7 +196,8 @@ class OneDSelector(Selector):
     """One-dimensional selector interaction
 
     Base class for all selectors which select data in one dimension, i.e.,
-    either the x or the y direction. The ``scale`` attribute should be provided.
+    either the x or the y direction. The ``scale`` attribute should
+    be provided.
 
     Attributes
     ----------
@@ -201,7 +206,8 @@ class OneDSelector(Selector):
         co-ordinates. This scale is used for setting the selected attribute for
         the selector.
     """
-    scale = Instance(Scale, allow_none=True, default_value=None).tag(sync=True, dimension='x', **widget_serialization)
+    scale = Instance(Scale, allow_none=True, default_value=None)\
+        .tag(sync=True, dimension='x', **widget_serialization)
     _model_name = Unicode('OneDSelectorModel').tag(sync=True)
 
 
@@ -223,10 +229,10 @@ class TwoDSelector(Selector):
         co-ordinates in the y-direction. This scale is used for setting the
         selected attribute for the selector along with ``x_scale``.
     """
-    x_scale = Instance(Scale, allow_none=True, default_value=None).tag(sync=True, dimension='x',
-                       **widget_serialization)
-    y_scale = Instance(Scale, allow_none=True, default_value=None).tag(sync=True, dimension='y',
-                       **widget_serialization)
+    x_scale = Instance(Scale, allow_none=True, default_value=None)\
+        .tag(sync=True, dimension='x', **widget_serialization)
+    y_scale = Instance(Scale, allow_none=True, default_value=None)\
+        .tag(sync=True, dimension='y', **widget_serialization)
     _model_name = Unicode('TwoDSelectorModel').tag(sync=True)
 
 
@@ -264,7 +270,8 @@ class FastIntervalSelector(OneDSelector):
     size: Float or None (default: None)
         if not None, this is the fixed pixel-width of the interval selector
     """
-    selected = Array(None, allow_none=True).tag(sync=True, **array_serialization)
+    selected = Array(None, allow_none=True)\
+        .tag(sync=True, **array_serialization)
     color = Color(None, allow_none=True).tag(sync=True)
     size = Float(None, allow_none=True).tag(sync=True)
 
@@ -277,7 +284,7 @@ class IndexSelector(OneDSelector):
 
     """Index selector interaction.
 
-    This 1-D selector interaction uses the mouse x-cooridnate to select the
+    This 1-D selector interaction uses the mouse x-coordinate to select the
     corresponding point in terms of the selector scale.
 
     Index Selector has two modes:
@@ -298,7 +305,8 @@ class IndexSelector(OneDSelector):
     line_width: nonnegative integer (default: 0)
         Width of the line represetning the index selector.
     """
-    selected = Array(None, allow_none=True).tag(sync=True, **array_serialization)
+    selected = Array(None, allow_none=True)\
+        .tag(sync=True, **array_serialization)
     line_width = Int(2).tag(sync=True)
     color = Color(None, allow_none=True).tag(sync=True)
 
@@ -335,11 +343,16 @@ class BrushIntervalSelector(OneDSelector):
         This attribute can be used to trigger computationally intensive code
         which should be run only on the interval selection being completed as
         opposed to code which should be run whenever selected is changing.
+    orientation: {'horizontal', 'vertical'}
+        The orientation of the interval, either vertical or horizontal
     color: Color or None (default: None)
         Color of the rectangle representing the brush selector.
     """
     brushing = Bool().tag(sync=True)
-    selected = Array(None, allow_none=True).tag(sync=True, **array_serialization)
+    selected = Array(None, allow_none=True)\
+        .tag(sync=True, **array_serialization)
+    orientation = Enum(['horizontal', 'vertical'],
+                       default_value='horizontal').tag(sync=True)
     color = Color(None, allow_none=True).tag(sync=True)
 
     _view_name = Unicode('BrushIntervalSelector').tag(sync=True)
@@ -354,7 +367,8 @@ class BrushSelector(TwoDSelector):
     This 2-D selector interaction enables the user to select a rectangular
     region using the brushing action of the mouse. A mouse-down marks the
     starting point of the interval. The drag after the mouse down selects the
-    rectangle of interest and a mouse-up signifies the end point of the interval.
+    rectangle of interest and a mouse-up signifies the end point of
+    the interval.
 
     Once an interval is drawn, the selector can be moved to a new interval by
     dragging the selector to the new interval.
@@ -364,11 +378,21 @@ class BrushSelector(TwoDSelector):
 
     Attributes
     ----------
-    selected: numpy.ndarray
+    selected_x: numpy.ndarray
         Two element array containing the start and end of the interval selected
-        in terms of the scales of the selector.
+        in terms of the x_scale of the selector.
         This attribute changes while the selection is being made with the
-        ``BrushIntervalSelector``.
+        ``BrushSelector``.
+    selected_y: numpy.ndarray
+        Two element array containing the start and end of the interval selected
+        in terms of the y_scale of the selector.
+        This attribute changes while the selection is being made with the
+        ``BrushSelector``.
+    selected: numpy.ndarray
+        A 2x2 array containing the coordinates ::
+
+            [[selected_x[0], selected_y[0]],
+             [selected_x[1], selected_y[1]]]
     brushing: bool (default: False)
         boolean attribute to indicate if the selector is being dragged.
         It is True when the selector is being moved and False when it is not.
@@ -380,38 +404,49 @@ class BrushSelector(TwoDSelector):
     """
     clear = Bool().tag(sync=True)
     brushing = Bool().tag(sync=True)
-    selected = List().tag(sync=True)
+    selected_x = Array(None, allow_none=True).tag(sync=True, **array_serialization)
+    selected_y = Array(None, allow_none=True).tag(sync=True, **array_serialization)
+    selected = Array(None, allow_none=True)
     color = Color(None, allow_none=True).tag(sync=True)
 
-    def __init__(self, **kwargs):
-        # Stores information regarding the scales. The date scaled values have
-        # to be converted into dateobjects because they are transmitted as
-        # strings.
-        try:
-            self.read_json_x = kwargs.get('x_scale').domain_class.from_json
-        except AttributeError:
-            self.read_json_x = None
-        try:
-            self.read_json_y = kwargs.get('y_scale').domain_class.from_json
-        except AttributeError:
-            self.read_json_y = None
-        super(BrushSelector, self).__init__(**kwargs)
+    # This is for backward compatibility for code that relied on selected
+    # instead of select_x and selected_y
+    @observe('selected_x', 'selected_y')
+    def _set_selected(self, change):
+        if self.selected_x is None or len(self.selected_x) == 0 or \
+           self.selected_y is None or len(self.selected_y) == 0:
+            self.selected = None
+        else:
+            self.selected = np.array([[self.selected_x[0], self.selected_y[0]],
+                                      [self.selected_x[1], self.selected_y[1]]])
 
-    def _selected_changed(self, name, selected):
-        if(len(self.selected) == 2):
-            if(self.read_json_x is not None):
-                self.selected[0][0] = self.read_json_x(self.selected[0][0])
-                self.selected[1][0] = self.read_json_x(self.selected[1][0])
-            if(self.read_json_y is not None):
-                self.selected[0][1] = self.read_json_y(self.selected[0][1])
-                self.selected[1][1] = self.read_json_y(self.selected[1][1])
+    @observe('selected')
+    def _set_selected_xy(self, change):
+        value = self.selected
+        if self.selected is None or len(self.selected) == 0:
+            # if we set either selected_x OR selected_y to None
+            # we don't want to set the other to None as well
+            if not (self.selected_x is None or len(self.selected_x) == 0 or
+                    self.selected_y is None or len(self.selected_y) == 0):
+                self.selected_x = None
+                self.selected_y = None
+        else:
+            (x0, y0), (x1, y1) = value
+            x = [x0, x1]
+            y = [y0, y1]
+
+            with self.hold_sync():
+                if not _array_equal(self.selected_x, x):
+                    self.selected_x = x
+                if not _array_equal(self.selected_y, y):
+                    self.selected_y = y
 
     _view_name = Unicode('BrushSelector').tag(sync=True)
     _model_name = Unicode('BrushSelectorModel').tag(sync=True)
 
 
 @register_interaction('bqplot.MultiSelector')
-class MultiSelector(OneDSelector):
+class MultiSelector(BrushIntervalSelector):
 
     """Multi selector interaction.
 
@@ -465,17 +500,16 @@ class MultiSelector(OneDSelector):
         along with the interval.
     """
     names = List().tag(sync=True)
-    brushing = Bool().tag(sync=True)
     selected = Dict().tag(sync=True)
     _selected = Dict().tag(sync=True)  # TODO: UglyHack. Hidden variable to get
     # around the even more ugly hack to have a trait which converts dates,
     # if present, into strings and send it across. It means writing a trait
     # which does that on top of a dictionary. I don't like that
-    show_names = Bool(True).tag(sync=True)  # TODO: Not a trait. The value has to
-                                        # be set at declaration time.
+
+    # TODO: Not a trait. The value has to be set at declaration time.
+    show_names = Bool(True).tag(sync=True)
 
     def __init__(self, **kwargs):
-        self.is_date = isinstance(kwargs.get('scale'), DateScale)
         try:
             self.read_json = kwargs.get('scale').domain_class.from_json
         except AttributeError:
@@ -503,11 +537,9 @@ class LassoSelector(TwoDSelector):
     """Lasso selector interaction.
 
     This 2-D selector enables the user to select multiple sets of data points
-    by drawing lassos on the figure. Lasso Selector is currently supported only
-    for Lines and Scatter marks. A mouse-down starts drawing the lasso and
+    by drawing lassos on the figure. A mouse-down starts drawing the lasso and
     after the mouse-up the lasso is closed and the `selected` attribute of each
-    mark gets updated with the data in the lasso. A lasso which doesn't
-    encompass any mark data will be automatically deleted.
+    mark gets updated with the data in the lasso.
 
     The user can select (de-select) by clicking on lassos and can delete them
     (and their associated data) by pressing the 'Delete' button.
@@ -519,21 +551,7 @@ class LassoSelector(TwoDSelector):
     color: Color (default: None)
         Color of the lasso.
     """
-    marks = List(Instance(Lines) | Instance(Scatter)).tag(sync=True, **widget_serialization)
     color = Color(None, allow_none=True).tag(sync=True)
-
-    def __init__(self, marks=None, **kwargs):
-        _marks = []
-        if marks is not None:
-            for mark in marks:
-                try:
-                    mark_trait = self.class_traits()['marks']
-                    _marks.append(mark_trait.validate_elements(self, [mark])[0])
-                except TraitError:
-                    pass
-
-        kwargs['marks'] = _marks
-        super(LassoSelector, self).__init__(**kwargs)
 
     _view_name = Unicode('LassoSelector').tag(sync=True)
     _model_name = Unicode('LassoSelectorModel').tag(sync=True)
